@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script src="https://code.jquery.com/jquery-3.2.1.js"></script>
+<script>
+$(document).ready(function(){
+
+	var canvas = document.getElementById('canvas');
+	var c = canvas.getContext('2d');
+	
+	// number of lives left
+	var livesLeft = 5;
+	// create missile base constructor
+	function MissileBase(x,y){
+		var base = {};	
+		base.active = true;
+		base.missileNum = 10;
+		base.draw = function(){
+			c.fillStyle = "yellow";
+			c.beginPath();
+			c.moveTo(x,y);
+			c.lineTo(x-50,y+50);
+			c.lineTo(x+50,y+50);
+			c.closePath();
+			c.strokeStyle = "red"
+			c.stroke();
+			c.font = '20pt Arial';
+			c.fillText(base.missileNum,x-15,y+43);
+		};
+		base.update = function(){
+			if(this.missileNum <= 0){this.active = false};
+		}
+		return base;
+	}
+
+	//create enemy constructor
+	function Enemy(){
+		var enemy = {};
+		enemy.active = true;
+		enemy.xSpeed = Math.random()*4;
+		enemy.ySpeed = Math.random()*10;
+		enemy.x = Math.random()*500;
+		enemy.y = 0;
+		enemy.initialX = enemy.x;
+		enemy.initialY = enemy.y;
+		enemy.draw = function(){
+			c.beginPath();
+			c.moveTo(enemy.initialX,enemy.initialY);
+			c.lineTo(enemy.x,enemy.y);
+			c.strokeStyle = "red";
+			c.stroke();
+		};
+		enemy.update = function(){
+			this.x += this.xSpeed;
+			this.y += this.ySpeed;
+		}
+		return enemy;
+	}
+
+	// create shoot function
+	function BombShoot(initialX,initialY,destX,destY){
+		var b = {};
+		b.active = true;
+		b.explode = false;
+		b.initialX = initialX;
+		b.initialY = initialY;
+		b.destX = destX;
+		b.destY = destY;
+		b.x = initialX;
+		b.y = initialY;
+		b.xSpeed = 8;
+		b.ySpeed = b.xSpeed*(Math.abs(destY-b.y)/(Math.abs(destX-b.x)));
+		b.draw = function(){
+			c.beginPath();
+			c.moveTo(b.initialX,b.initialY);
+			c.lineTo(b.x,b.y);
+			c.strokeStyle = "yellow";
+			c.stroke();
+			
+		};
+		b.update = function(){
+			// explode when reached clicked destination
+			if(b.y <= b.destY){b.explode = true};
+			// deactivate when trailing bombs are finished
+			if(b.initialY <= b.destY){b.active = false;console.log("deactivated");};
+
+			if(b.explode){
+				// exploding smoke
+				b.radius += 10;
+				explodingSmoke();
+
+
+				if(b.destX >= b.initialX){
+					b.initialX += b.xSpeed;
+				}else{
+				console.log("exploded");
+					b.initialX -= b.xSpeed;
+				}
+				b.initialY -= b.ySpeed;
+			}else{
+				if(b.destX >= b.initialX){
+					b.x += b.xSpeed;
+				}else{
+					b.x -= b.xSpeed;
+				}
+				b.y -= b.ySpeed;
+			}
+		};
+		b.radius = 0;
+		function explodingSmoke(){
+			c.beginPath();
+			c.arc(b.destX,b.destY,b.radius,0,Math.PI*2);
+			c.strokeStyle="gray";
+			c.stroke();
+
+		}
+
+		return b;
+	}
+	// create an array of moving bombs
+	var bombs = [];
+
+	// create an array of 3 missile bases
+	var missileBases = []
+	for(i=1;i<4;i++){
+		if(i==1){
+			missileBases.push(MissileBase(i*60,430));
+		}else if(i==2){
+			missileBases.push(MissileBase(i*125,430));
+		}else if(i==3){
+			missileBases.push(MissileBase(i*145,430));
+		}
+	}
+
+	// create an array of 10 enemies
+	var enemies = []
+	for(i=0;i<3;i++){
+		enemies.push(Enemy());
+	}
+
+
+	// Draw everything in the canvas
+	function draw(){
+		// draw lives left
+		c.font = "20pt Arial";
+		c.fillStyle = "white";
+		c.fillText(livesLeft+ (livesLeft>1? " lives":" life"),20,25);
+		// draw missile bases
+		missileBases.forEach(function(missileBase){
+			missileBase.draw();
+		});
+
+		// draw enemies
+		enemies.forEach(function(enemy){
+			enemy.draw();
+		});
+
+		// moving missile/bomb 
+		if(bombs.length >0){
+			bombs.forEach(function(bomb){
+				bomb.draw();
+			});
+		}
+	}
+	// Update everything in the canvas
+	function update(){
+		// missile base
+		missileBases.forEach(function(missileBase){
+			missileBase.update();
+		});
+		
+
+		// enemies
+		enemies.forEach(function(enemy){
+			enemy.update();
+		});
+		enemies = enemies.filter(function(enemy){
+			return enemy.active;
+		});
+
+		// moving missile/bomb
+		if(bombs.length >0){
+			bombs.forEach(function(bomb){
+				bomb.update();
+			});
+			bombs = bombs.filter(function(bomb){
+				return bomb.active;
+			})
+		}
+		// check whether enemies are taken down
+		checkEnemiesSmokeCollision();
+		// check if base is destroyed
+		checkEnemiesDestroyBase();
+		// check game is over
+		checkGameOver();
+	}
+	// main clock
+	setInterval(function(){
+		c.clearRect(0,0,500,500);
+		// fill background color
+		c.fillStyle = 'blue';
+		c.fillRect(0,0,500,500);
+		draw();
+		update();
+
+
+		// off addEnemyClock at random time
+		if(Math.random()*1000 <= 1){
+			clearInterval(addEnemyClock);
+		}
+	},100);
+	// adding enemy at intervals
+	var addEnemyClock=setInterval(function(){
+		enemies.push(Enemy());
+	},3000);
+
+	function checkEnemiesSmokeCollision(){
+		enemies = enemies.map(function(enemy){
+			bombs.forEach(function(bomb){
+				var distance = Math.sqrt(Math.abs(enemy.x-bomb.destX)**2 + Math.abs(enemy.y-bomb.destY)**2);
+				if(distance <= bomb.radius){
+					enemy.active = false;
+				}
+			});
+			return enemy;
+		});
+	}
+
+	function checkEnemiesDestroyBase(){
+		enemies.forEach(function(enemy,index){
+			if(enemy.y>430 && enemy.x > 0 && enemy.x < 500){
+				livesLeft -= 1;
+				enemies[index].active = false;
+			}
+		});
+	}
+
+	function checkGameOver(){
+		if(livesLeft == 0){
+			alert("GameOver. Please Refresh.");
+		}
+	}
+
+	// mousedown event
+	function mousedownHandler(e){
+
+		var targetX = e.pageX - canvas.offsetLeft;
+		var targetY = e.pageY - canvas.offsetTop;
+		// only for target above the missile base
+		if(targetY<=430){
+			// first base
+			if(targetX<=155 && missileBases[0].active ){
+				bombs.push(BombShoot(60,430,targetX,targetY));
+				missileBases[0].missileNum -= 1;
+			}
+			// second base
+			else if(targetX <=343 && missileBases[1].active){
+				bombs.push(BombShoot(250,430,targetX,targetY));
+				missileBases[1].missileNum -= 1;
+				
+			}
+			// third base
+			else if(targetX >343 && missileBases[2].active){
+				bombs.push(BombShoot(435,430,targetX,targetY));
+				missileBases[2].missileNum -= 1;
+				
+			}
+		}
+		
+	}
+	$('#canvas').on('mousedown',mousedownHandler);
+});
+
+
+	
+
+	
+
+</script>
+</head>
+<body>
+<canvas width="500" height="500" id="canvas"></canvas>
+</body>
+</html>
